@@ -28,6 +28,7 @@
       "environment": {},
       "binaryDir": "${sourceDir}/out/${presetName}",
       "cacheVariables": {
+        "CUSTOM_PHP_CONFIG": "/root/php/bin/php-config",
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
         "PHP_SCYLLADB_LIBUV_STATIC": "ON",
