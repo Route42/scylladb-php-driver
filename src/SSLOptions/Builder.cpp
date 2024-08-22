@@ -14,363 +14,287 @@
  * limitations under the License.
  */
 
-#include "php_driver.h"
-#include "php_driver_types.h"
+#include <SSLOptions/SSLOptions.h>
+#include <utility>
 
-#include <ext/standard/php_filestat.h>
+#include <php_driver.h>
+#include <php.h>
+#include <php_driver_types.h>
+
+
 BEGIN_EXTERN_C()
-zend_class_entry *php_driver_ssl_builder_ce = NULL;
+#include <ext/standard/php_filestat.h>
 
-static int
-file_get_contents(char *path, char **output, int *len )
-{
-#if PHP_MAJOR_VERSION >= 7
-  zend_string *str;
-  php_stream *stream = php_stream_open_wrapper(path, "rb",
-                         USE_PATH|REPORT_ERRORS, NULL);
-#else
-  php_stream *stream = php_stream_open_wrapper(path, "rb",
-                         USE_PATH|REPORT_ERRORS|ENFORCE_SAFE_MODE, NULL);
-#endif
-
+static zend_result file_get_contents(const zend_string *path, zend_string** out_val) {
+  php_stream *stream =
+      php_stream_open_wrapper(ZSTR_VAL(path), "rb", USE_PATH | REPORT_ERRORS, NULL);
   if (!stream) {
-    zend_throw_exception_ex(php_driver_runtime_exception_ce, 0 ,
-      "The path '%s' doesn't exist or is not readable", path);
-    return 0;
+    zend_throw_exception_ex(php_driver_runtime_exception_ce, 0,
+                            "The path '%s' doesn't exist or is not readable", ZSTR_VAL(path));
+    return FAILURE;
   }
 
-#if PHP_MAJOR_VERSION >= 7
-  str = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, 0);
-  if (str) {
-    *output = estrndup(str->val, str->len);
-    *len = str->len;
-    zend_string_release(str);
-  } else {
-    php_stream_close(stream);
-    return 0;
-  }
-#else
-  *len = php_stream_copy_to_mem(stream, output, PHP_STREAM_COPY_ALL, 0);
-#endif
-
+  zend_string *str = php_stream_copy_to_mem(stream, PHP_STREAM_COPY_ALL, 0);
   php_stream_close(stream);
-  return 1;
+
+  if (!str) {
+    zend_throw_exception_ex(php_driver_runtime_exception_ce, 0, "Failed to allocate enough memory");
+    return FAILURE;
+  }
+
+  *out_val = str;
+
+  return SUCCESS;
 }
 
-PHP_METHOD(SSLOptionsBuilder, build)
-{
-  php_driver_ssl *ssl = NULL;
-  int   len;
-  char *contents;
-  CassError rc;
+#include "Builder_arginfo.h"
 
-  php_driver_ssl_builder *builder = PHP_DRIVER_GET_SSL_BUILDER(getThis());
+zend_class_entry *php_scylladb_ssl_builder_ce = nullptr;
 
-  object_init_ex(return_value, php_driver_ssl_ce);
-  ssl = PHP_DRIVER_GET_SSL(return_value);
+ZEND_METHOD(Cassandra_SSLOptions_Builder, build) {
+  const php_scylladb_ssl *ssl = php_scylladb_ssl_instantiate(return_value);
+  if (ssl == nullptr) {
+    zend_throw_exception_ex(php_driver_runtime_exception_ce, 0,
+                            "Failed to initialize Cassandra\\SSLOptions");
+    return;
+  }
 
-  cass_ssl_set_verify_flags(ssl->ssl, builder->flags);
+  const auto *builder = Z_SCYLLADB_SSL_BUILDER_P(ZEND_THIS);
+
+  cass_ssl_set_verify_flags(ssl->ssl, static_cast<int>(builder->flags));
 
   if (builder->trusted_certs) {
-    int   i;
-    char *path;
-
-    for (i = 0; i < builder->trusted_certs_cnt; i++) {
-      path = builder->trusted_certs[i];
-
-      if (!file_get_contents(path, &contents, &len ))
+    for (size_t i = 0; i < builder->trusted_certs_cnt; i++) {
+      zend_string* str;
+      if (file_get_contents(builder->trusted_certs[i], &str) == FAILURE) {
         return;
+      }
 
-      rc = cass_ssl_add_trusted_cert_n(ssl->ssl, contents, len);
-      efree(contents);
-      ASSERT_SUCCESS(rc);
+      const CassError rc = cass_ssl_add_trusted_cert_n(ssl->ssl, ZSTR_VAL(str), ZSTR_LEN(str));
+      zend_string_release(str);
+
+      if (rc != CASS_OK) {
+        zend_throw_exception_ex(exception_class(rc), rc, "%s", cass_error_desc(rc));
+        return;
+      }
     }
   }
 
   if (builder->client_cert) {
-    if (!file_get_contents(builder->client_cert, &contents, &len ))
+    zend_string *str = nullptr;
+    if (file_get_contents(builder->client_cert, &str) == FAILURE) {
       return;
+    }
 
-    rc = cass_ssl_set_cert_n(ssl->ssl, contents, len);
-    efree(contents);
-    ASSERT_SUCCESS(rc);
+    const CassError rc = cass_ssl_set_cert_n(ssl->ssl, ZSTR_VAL(str), ZSTR_LEN(str));
+    zend_string_release(str);
+    if (rc != CASS_OK) {
+      zend_throw_exception_ex(exception_class(rc), rc, "%s", cass_error_desc(rc));
+      return;
+    }
   }
 
   if (builder->private_key) {
-    if (!file_get_contents(builder->private_key, &contents, &len ))
-      return;
+    zend_string *str = nullptr;
 
-    rc = cass_ssl_set_private_key(ssl->ssl, contents, builder->passphrase);
-    efree(contents);
-    ASSERT_SUCCESS(rc);
+    if (file_get_contents(builder->private_key, &str) == FAILURE) {
+      return;
+    }
+
+    const CassError rc = cass_ssl_set_cert_n(ssl->ssl, ZSTR_VAL(str), ZSTR_LEN(str));
+    zend_string_release(str);
+    if (rc != CASS_OK) {
+      zend_throw_exception_ex(exception_class(rc), rc, "%s", cass_error_desc(rc));
+    }
   }
 }
 
-PHP_METHOD(SSLOptionsBuilder, withTrustedCerts)
-{
-  zval readable;
-  zval* args = NULL;
-  int argc = 0, i;
-  php_driver_ssl_builder *builder = NULL;
+ZEND_METHOD(Cassandra_SSLOptions_Builder, withTrustedCerts) {
+  const zval *args = nullptr;
+  int argc = 0;
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() , "+", &args, &argc) == FAILURE) {
-    return;
-  }
+  // clang-format off
+  ZEND_PARSE_PARAMETERS_START(1, -1)
+    Z_PARAM_VARIADIC('+', args, argc)
+  ZEND_PARSE_PARAMETERS_END();
+  // clang-format on
 
-  for (i = 0; i < argc; i++) {
-    zval *path = &args[i];
+  auto **certs = static_cast<zend_string **>(ecalloc(argc, sizeof(zend_string *)));
+
+  for (int i = 0; i < argc; i++) {
+    const zval *path = &args[i];
 
     if (Z_TYPE_P(path) != IS_STRING) {
-      throw_invalid_argument(path, "path", "a path to a trusted cert file" );
-
-    }
-
-#if PHP_VERSION_ID < 80100
-    php_stat(Z_STRVAL_P(path), Z_STRLEN_P(path), FS_IS_R, &readable );
-#else
-    zend_string* path_str = zend_string_init(Z_STRVAL_P(path), Z_STRLEN_P(path), false);
-    php_stat(path_str, FS_IS_R, &readable );
-    zend_string_release(path_str);
-#endif
-
-    if (PHP_SCYLLADB_Z_IS_FALSE_P(&readable)) {
-      zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-                              "The path '%s' doesn't exist or is not readable", Z_STRVAL_P(path));
-
+      throw_invalid_argument(path, "path", "a path to a trusted cert file");
+      efree(certs);
       return;
     }
+
+    zval readable;
+    php_stat(Z_STR_P(path), FS_IS_R, &readable);
+
+    if (Z_TYPE(readable) == IS_FALSE) {
+      zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
+                              "The path '%s' doesn't exist or is not readable", Z_STRVAL_P(path));
+      efree(certs);
+      return;
+    }
+
+    certs[i] = zend_string_copy(Z_STR_P(path));
   }
 
-  builder = PHP_DRIVER_GET_SSL_BUILDER(getThis());
+  auto *builder = Z_SCYLLADB_SSL_BUILDER_P(ZEND_THIS);
 
   if (builder->trusted_certs) {
-    for (i = 0; i < builder->trusted_certs_cnt; i++) {
-      efree(builder->trusted_certs[i]);
+    for (size_t i = 0; i < builder->trusted_certs_cnt; i++) {
+      zend_string_release(builder->trusted_certs[i]);
     }
 
     efree(builder->trusted_certs);
   }
 
   builder->trusted_certs_cnt = argc;
-  builder->trusted_certs     = static_cast<char **>(ecalloc(argc, sizeof(char*)));
-
-  for (i = 0; i < argc; i++) {
-    zval* path = &args[i];
-
-    builder->trusted_certs[i] = estrndup(Z_STRVAL_P(path), Z_STRLEN_P(path));
-  }
-
+  builder->trusted_certs = certs;
 
   RETURN_ZVAL(getThis(), 1, 0);
 }
 
-PHP_METHOD(SSLOptionsBuilder, withVerifyFlags)
-{
-  long flags;
-  php_driver_ssl_builder* builder = NULL;
+ZEND_METHOD(Cassandra_SSLOptions_Builder, withVerifyFlags) {
+  zend_long flags;
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() , "l", &flags) == FAILURE) {
-    return;
-  }
+  // clang-format off
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+    Z_PARAM_LONG(flags)
+  ZEND_PARSE_PARAMETERS_END();
+  // clang-format on
 
-  builder = PHP_DRIVER_GET_SSL_BUILDER(getThis());
-
-  builder->flags = (int) flags;
+  Z_SCYLLADB_SSL_BUILDER_P(ZEND_THIS)->flags = flags;
 
   RETURN_ZVAL(getThis(), 1, 0);
 }
 
-PHP_METHOD(SSLOptionsBuilder, withClientCert)
-{
-  char* client_cert;
-  size_t client_cert_len;
+ZEND_METHOD(Cassandra_SSLOptions_Builder, withClientCert) {
+  zend_string *client_cert = nullptr;
+
+  // clang-format off
+  ZEND_PARSE_PARAMETERS_START(1, 1)
+    Z_PARAM_STR(client_cert)
+  ZEND_PARSE_PARAMETERS_END();
+  // clang-format on
+
   zval readable;
-  php_driver_ssl_builder* builder = NULL;
+  php_stat(client_cert, FS_IS_R, &readable);
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() , "s", &client_cert, &client_cert_len) == FAILURE) {
+  if (Z_TYPE(readable) == IS_FALSE) {
+    zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
+                            "The path '%s' doesn't exist or is not readable",
+                            ZSTR_VAL(client_cert));
     return;
   }
 
-#if PHP_VERSION_ID < 80100
-  php_stat(client_cert, client_cert_len, FS_IS_R, &readable );
-#else
-  zend_string* client_cert_str = zend_string_init(client_cert, client_cert_len, false);
-  php_stat(client_cert_str, FS_IS_R, &readable );
-  zend_string_release(client_cert_str);
-#endif
+  auto *builder = Z_SCYLLADB_SSL_BUILDER_P(ZEND_THIS);
 
-  if (PHP_SCYLLADB_Z_IS_FALSE_P(&readable)) {
-    zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-                            "The path '%s' doesn't exist or is not readable", client_cert);
-    return;
+  if (builder->client_cert) {
+    zend_string_release(builder->client_cert);
   }
 
-  builder = PHP_DRIVER_GET_SSL_BUILDER(getThis());
-
-  if (builder->client_cert)
-    efree(builder->client_cert);
-
-  builder->client_cert = estrndup(client_cert, client_cert_len);
+  builder->client_cert = zend_string_copy(client_cert);
 
   RETURN_ZVAL(getThis(), 1, 0);
 }
 
-PHP_METHOD(SSLOptionsBuilder, withPrivateKey)
-{
-  char* private_key;
-  char* passphrase = NULL;
-  size_t private_key_len, passphrase_len;
+ZEND_METHOD(Cassandra_SSLOptions_Builder, withPrivateKey) {
+  zend_string *private_key = nullptr, *passphrase = nullptr;
+
+  // clang-format off
+  ZEND_PARSE_PARAMETERS_START(1, 2)
+    Z_PARAM_STR(private_key)
+    Z_PARAM_OPTIONAL
+    Z_PARAM_STR(passphrase)
+  ZEND_PARSE_PARAMETERS_END();
+  // clang-format on
+
   zval readable;
-  php_driver_ssl_builder* builder = NULL;
+  php_stat(private_key, FS_IS_R, &readable);
 
-  if (zend_parse_parameters(ZEND_NUM_ARGS() , "s|s", &private_key, &private_key_len, &passphrase, &passphrase_len) == FAILURE) {
+  if (Z_TYPE(readable) == IS_FALSE) {
+    zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
+                            "The path '%s' doesn't exist or is not readable",
+                            ZSTR_VAL(private_key));
     return;
   }
 
-#if PHP_VERSION_ID < 80100
-  php_stat(private_key, private_key_len, FS_IS_R, &readable );
-#else
-  zend_string* private_key_str = zend_string_init(private_key, private_key_len, false);
-  php_stat(private_key_str, FS_IS_R, &readable );
-  zend_string_release(private_key_str);
-#endif
+  auto *builder = ZendCPP::ObjectFetch<php_scylladb_ssl_builder>(ZEND_THIS);
 
-  if (PHP_SCYLLADB_Z_IS_FALSE_P(&readable)) {
-    zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-      "The path '%s' doesn't exist or is not readable", private_key);
-    return;
+  if (builder->private_key) {
+    zend_string_release(builder->private_key);
   }
 
-  builder = PHP_DRIVER_GET_SSL_BUILDER(getThis());
-
-  if (builder->private_key)
-    efree(builder->private_key);
-
-  builder->private_key = estrndup(private_key, private_key_len);
+  builder->private_key = zend_string_copy(private_key);
 
   if (builder->passphrase) {
-    efree(builder->passphrase);
-    builder->passphrase = NULL;
+    zend_string_release(builder->passphrase);
+    builder->passphrase = nullptr;
   }
 
-  if (passphrase)
-    builder->passphrase = estrndup(passphrase, passphrase_len);
+  if (passphrase) {
+    builder->passphrase = zend_string_copy(passphrase);
+  }
 
   RETURN_ZVAL(getThis(), 1, 0);
 }
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_none, 0, ZEND_RETURN_VALUE, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_path, 0, ZEND_RETURN_VALUE, 1)
-  ZEND_ARG_INFO(0, path)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_flags, 0, ZEND_RETURN_VALUE, 1)
-  ZEND_ARG_INFO(0, flags)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_INFO_EX(arginfo_key, 0, ZEND_RETURN_VALUE, 1)
-  ZEND_ARG_INFO(0, path)
-  ZEND_ARG_INFO(0, passphrase)
-ZEND_END_ARG_INFO()
-
-static zend_function_entry php_driver_ssl_builder_methods[] = {
-  PHP_ME(SSLOptionsBuilder, build, arginfo_none, ZEND_ACC_PUBLIC)
-  PHP_ME(SSLOptionsBuilder, withTrustedCerts, arginfo_path,
-    ZEND_ACC_PUBLIC)
-  PHP_ME(SSLOptionsBuilder, withVerifyFlags, arginfo_flags,
-    ZEND_ACC_PUBLIC)
-  PHP_ME(SSLOptionsBuilder, withClientCert, arginfo_path,
-    ZEND_ACC_PUBLIC)
-  PHP_ME(SSLOptionsBuilder, withPrivateKey, arginfo_key,
-    ZEND_ACC_PUBLIC)
-  PHP_FE_END
-};
 
 static zend_object_handlers php_driver_ssl_builder_handlers;
 
-static HashTable *
-php_driver_ssl_builder_properties(
-#if PHP_MAJOR_VERSION >= 8
- zend_object *object
-#else
- zendObject *object
-#endif
-)
-{
-  HashTable *props = zend_std_get_properties(object );
+static HashTable *php_driver_ssl_builder_properties(zend_object *object) {
+  HashTable *props = zend_std_get_properties(object);
 
   return props;
 }
 
-static int
-php_driver_ssl_builder_compare(zval *obj1, zval *obj2 )
-{
-  if (Z_OBJCE_P(obj1) != Z_OBJCE_P(obj2))
-    return 1; /* different classes */
+static int php_driver_ssl_builder_compare(zval *obj1, zval *obj2) {
+  ZEND_COMPARE_OBJECTS_FALLBACK(obj1, obj2);
+
+  if (Z_OBJCE_P(obj1) != Z_OBJCE_P(obj2)) return 1; /* different classes */
 
   return Z_OBJ_HANDLE_P(obj1) != Z_OBJ_HANDLE_P(obj1);
 }
 
-static void
-php_driver_ssl_builder_free(zend_object *object )
-{
-  php_driver_ssl_builder *self = PHP5TO7_ZEND_OBJECT_GET(ssl_builder, object);
+static void php_driver_ssl_builder_free(zend_object *object) {
+  const auto *self = ZendCPP::ObjectFetch<php_scylladb_ssl_builder>(object);
 
   if (self->trusted_certs) {
-    int i;
-
-    for (i = 0; i < self->trusted_certs_cnt; i++)
-      efree(self->trusted_certs[i]);
-
+    for (size_t i = 0; i < self->trusted_certs_cnt; i++) {
+      zend_string_release(self->trusted_certs[i]);
+    }
     efree(self->trusted_certs);
   }
 
-  if (self->client_cert)
-    efree(self->client_cert);
+  if (self->client_cert) {
+    zend_string_release(self->client_cert);
+  }
 
-  if (self->private_key)
-    efree(self->private_key);
+  if (self->private_key) {
+    zend_string_release(self->private_key);
+  }
 
-  if (self->passphrase)
-    efree(self->passphrase);
-
-  zend_object_std_dtor(&self->zendObject);
-
+  if (self->passphrase) {
+    zend_string_release(self->passphrase);
+  }
 }
 
-static zend_object*
-php_driver_ssl_builder_new(zend_class_entry *ce )
-{
-  php_driver_ssl_builder *self =
-      PHP5TO7_ZEND_OBJECT_ECALLOC(ssl_builder, ce);
-
-  self->flags             = 0;
-  self->trusted_certs     = NULL;
-  self->trusted_certs_cnt = 0;
-  self->client_cert       = NULL;
-  self->private_key       = NULL;
-  self->passphrase        = NULL;
-
-  PHP5TO7_ZEND_OBJECT_INIT(ssl_builder, self, ce);
+static zend_object *php_driver_ssl_builder_new(zend_class_entry *ce) {
+  auto *self = ZendCPP::Allocate<php_scylladb_ssl_builder>(ce, &php_driver_ssl_builder_handlers);
+  return &self->zendObject;
 }
 
-void php_driver_define_SSLOptionsBuilder()
-{
-  zend_class_entry ce;
+void php_driver_define_SSLOptionsBuilder() {
+  php_scylladb_ssl_builder_ce = register_class_Cassandra_SSLOptions_Builder();
+  php_scylladb_ssl_builder_ce->create_object = php_driver_ssl_builder_new;
 
-  INIT_CLASS_ENTRY(ce, PHP_DRIVER_NAMESPACE "\\SSLOptions\\Builder", php_driver_ssl_builder_methods);
-  php_driver_ssl_builder_ce = zend_register_internal_class(&ce );
-  php_driver_ssl_builder_ce->ce_flags     |= ZEND_ACC_FINAL;
-  php_driver_ssl_builder_ce->create_object = php_driver_ssl_builder_new;
-
-  memcpy(&php_driver_ssl_builder_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
-  php_driver_ssl_builder_handlers.get_properties  = php_driver_ssl_builder_properties;
-#if PHP_MAJOR_VERSION >= 8
+  ZendCPP::InitHandlers<php_scylladb_ssl_builder>(&php_driver_ssl_builder_handlers);
+  php_driver_ssl_builder_handlers.get_properties = php_driver_ssl_builder_properties;
   php_driver_ssl_builder_handlers.compare = php_driver_ssl_builder_compare;
-#else
-  php_driver_ssl_builder_handlers.compare_objects = php_driver_ssl_builder_compare;
-#endif
+  php_driver_ssl_builder_handlers.free_obj = php_driver_ssl_builder_free;
 }
 END_EXTERN_C()

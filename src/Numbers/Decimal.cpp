@@ -117,7 +117,7 @@ static void from_double(php_driver_numeric *result, double value)
     }
 
     /* There isn't any "long long" setter method  */
-    sprintf(mantissa_str, LL_FORMAT, (long long)mantissa);
+    sprintf(mantissa_str, "%" PRId64, mantissa);
 
     mpz_set_str(result->data.decimal.value, mantissa_str, 10);
 

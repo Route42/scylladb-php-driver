@@ -49,8 +49,7 @@ zend_result php_driver_timeuuid_init(zval *returnValue, zend_string *str = nullp
 
   if (str != nullptr) {
     if (cass_uuid_from_string(ZSTR_VAL(str), &self->uuid) != CASS_OK) {
-      zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0, "Invalid UUID: '%.*s'",
-                              (int)ZSTR_LEN(str), ZSTR_VAL(str));
+      zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0, "Invalid UUID: '%s'", ZSTR_VAL(str));
       return FAILURE;
     }
 

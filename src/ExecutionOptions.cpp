@@ -150,7 +150,7 @@ static zend_result build_from_array(php_driver_execution_options *self, zval *op
     if (PHP5TO7_ZEND_HASH_FIND(Z_ARRVAL_P(options), "retry_policy", sizeof("retry_policy"), retry_policy))
     {
         if (Z_TYPE_P(retry_policy) != IS_OBJECT &&
-            !instanceof_function(Z_OBJCE_P(retry_policy), php_driver_retry_policy_ce))
+            !instanceof_function(Z_OBJCE_P(retry_policy), php_scylladb_retry_policy_ce))
         {
             throw_invalid_argument(retry_policy, "retry_policy",
                                    "an instance of " PHP_DRIVER_NAMESPACE "\\RetryPolicy");

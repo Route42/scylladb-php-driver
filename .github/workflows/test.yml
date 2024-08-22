@@ -1,50 +1,38 @@
-name: 'Test PHP Extension'
+name: "Test PHP Extension"
 
 on:
-  workflow_dispatch:
-    inputs:
-      image:
-        type: string
-        description: 'Image Tag'
-        required: true
-        default: 'php-8.2.6'
   workflow_call:
-    inputs:
-      image:
-        type: string
-        description: 'Image Tag'
-        required: true
-        default: 'php-8.2.6'
+  push:
+    branches:
+      - v1.3.x
+  pull_request:
+    branches:
+      - v1.3.x
 jobs:
   test:
+    strategy:
+      matrix:
+        php: ['8.1', '8.2', '8.3', '8.1-zts', '8.2-zts', '8.3-zts']
+        os: ['ubuntu-20.04', 'ubuntu-24.04']
+        preset: ['CICassandraDebug', 'CIScyllaDebug']
+      fail-fast: false
     runs-on: ubuntu-latest
-    container: malusevd99/scylladb-php-driver:${{ inputs.image }}
-    services:
-      scylladb:
-        image: scylladb/scylla:5.1
-        ports:
-          - 9042:9042
+    container: malusevd99/scylladb-php-driver:${{ matrix.os }}-php-${{ matrix.php }}-debug
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: recursive
-      - name: Set new PATH
-        run: |
-          export PATH=$PATH:/usr/local/bin:/root/php/bin
-      - name: Compile using CMake
-        run: |
-          ./scripts/compile-extension.sh
-      - name: Composer install
-        working-directory: ./tests
-        run: |
-          /root/php/bin/php /bin/composer install
       - name: Run tests
-        working-directory: ./tests
         run: |
-          /root/php/bin/php ./vendor/bin/pest
-        env:
-          SCYLLADB_HOSTS: scylladb
-          SCYLLADB_PORT: 9042
-          SCYLLADB_USERNAME: cassandra
-          SCYLLADB_PASSWORD: cassandra
+          cmake --preset ${{ matrix.preset }} || exit 1
+
+          cd out/${{ matrix.preset }} || exit 1
+          ninja install || exit 1
+          cd ../../
+
+          cat cassandra.ini >> "$(php-config --ini-path | xargs -I {} printf '%s/php.ini' {})" || exit 1
+
+          cd tests
+          composer install
+          php ./vendor/bin/pest

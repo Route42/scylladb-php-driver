@@ -54,7 +54,7 @@ static zend_result to_long(zval *result, php_driver_numeric *bigint)
 static zend_result to_string(zval *result, php_driver_numeric *bigint)
 {
     char *string;
-    spprintf(&string, 0, LL_FORMAT, (long long int)bigint->data.bigint.value);
+    spprintf(&string, 0, "%" PRId64, bigint->data.bigint.value);
     ZVAL_STRING(result, string);
     efree(string);
     return SUCCESS;
@@ -91,7 +91,7 @@ void php_driver_bigint_init(INTERNAL_FUNCTION_PARAMETERS)
         if (double_value > INT64_MAX || double_value < INT64_MIN)
         {
             zend_throw_exception_ex(php_driver_range_exception_ce, 0,
-                                    "value must be between " LL_FORMAT " and " LL_FORMAT ", %g given", INT64_MIN,
+                                    "value must be between %" PRId64 " and %" PRId64 ", %g given", INT64_MIN,
                                     INT64_MAX, double_value);
             return;
         }

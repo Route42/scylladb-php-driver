@@ -24,7 +24,7 @@ PHP_DRIVER_CORE_METHOD(cluster) {
 }
 
 PHP_DRIVER_CORE_METHOD(ssl) {
-  object_init_ex(return_value, php_driver_ssl_builder_ce);
+  object_init_ex(return_value, php_scylladb_ssl_builder_ce);
 }
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_none, 0, ZEND_RETURN_VALUE, 0)
@@ -142,8 +142,7 @@ void php_driver_define_Core() {
   zend_declare_class_constant_string(php_driver_core_ce, ZEND_STRL("TYPE_INET"),
                                      "inet");
 
-  zend_declare_class_constant_string(php_driver_core_ce, ZEND_STRL("VERSION"),
-                                     PHP_DRIVER_VERSION_FULL);
+  zend_declare_class_constant_string(php_driver_core_ce, ZEND_STRL("VERSION"), PHP_DRIVER_VERSION);
 
   snprintf(buf, sizeof(buf), "%d.%d.%d%s", CASS_VERSION_MAJOR,
            CASS_VERSION_MINOR, CASS_VERSION_PATCH,

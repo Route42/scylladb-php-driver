@@ -872,7 +872,7 @@ zval php_driver_type_custom(const char* name, size_t name_length) {
                           describe_token(token), ((int)(str - validator) - 1), validator);     \
   return FAILURE;
 
-enum token_type {
+enum describe_token_type {
   TOKEN_ILLEGAL = 0,
   TOKEN_PAREN_OPEN,
   TOKEN_PAREN_CLOSE,
@@ -882,9 +882,9 @@ enum token_type {
   TOKEN_END
 };
 
-enum parser_state { STATE_CLASS = 0, STATE_AFTER_CLASS, STATE_AFTER_PARENS, STATE_END };
+enum types_parser_state { STATE_CLASS = 0, STATE_AFTER_CLASS, STATE_AFTER_PARENS, STATE_END };
 
-static const char* describe_token(enum token_type token) {
+static const char* describe_token(enum describe_token_type token) {
   switch (token) {
     case TOKEN_ILLEGAL:
       return "illegal character";
@@ -907,9 +907,9 @@ static const char* describe_token(enum token_type token) {
 
 static int isletter(char ch) { return isalnum(ch) || ch == '.'; }
 
-static enum token_type next_token(const char* str, size_t len, const char** token_str,
+static enum describe_token_type next_token(const char* str, size_t len, const char** token_str,
                                   size_t* token_len, const char** str_out, size_t* len_out) {
-  enum token_type type;
+  enum describe_token_type type;
   unsigned int i = 0;
   char c = str[i];
 
@@ -994,8 +994,8 @@ static int php_driver_parse_class_name(const char* validator, size_t validator_l
   size_t len;
   const char* token_str;
   size_t token_len;
-  enum parser_state state;
-  enum token_type token;
+  enum types_parser_state state;
+  enum describe_token_type token;
   struct node_s* root;
   struct node_s* node;
   struct node_s* child;
@@ -1350,3 +1350,4 @@ int php_driver_parse_column_type(const char* validator, size_t validator_len, in
 
   return SUCCESS;
 }
+

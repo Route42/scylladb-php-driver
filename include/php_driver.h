@@ -45,17 +45,10 @@ extern "C"
 #include <Zend/zend_interfaces.h>
 #include <Zend/zend_types.h>
 
-#define LL_FORMAT "%lld"
-
 #if PHP_VERSION_ID < 80100
 #error PHP 8.1.0 or later is required in order to build the driver
 #endif
 
-
-#include <ext/spl/spl_exceptions.h>
-#include <ext/spl/spl_iterators.h>
-
-#include "api.h"
 
 #define PHP_DRIVER_NAMESPACE "Cassandra"
 
@@ -209,7 +202,7 @@ typedef unsigned long ulong;
 
     zend_class_entry *exception_class(CassError rc);
 
-    void throw_invalid_argument(zval *object, const char *object_name, const char *expected_type);
+    void throw_invalid_argument(const zval *object, const char *object_name, const char *expected_type);
 
 #define INVALID_ARGUMENT(object, expected)                                                                             \
     do                                                                                                                 \

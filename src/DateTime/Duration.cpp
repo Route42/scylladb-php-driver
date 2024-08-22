@@ -7,13 +7,14 @@
 #include <util/types.h>
 
 BEGIN_EXTERN_C()
+#include <spl/spl_exceptions.h>
 
-zend_class_entry *php_driver_duration_ce = NULL;
+zend_class_entry *php_driver_duration_ce = nullptr;
 
 static void to_string(zval *result, cass_int64_t value)
 {
   char *string;
-  spprintf(&string, 0, LL_FORMAT, value);
+  spprintf(&string, 0, "%" PRId64, value);
   ZVAL_STRING(result, string);
   efree(string);
 }
@@ -29,7 +30,7 @@ static int get_param(zval* value,
 
     if (long_value > max || long_value < min) {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-        "%s must be between " LL_FORMAT " and " LL_FORMAT ", " LL_FORMAT " given",
+        "%s must be between %" PRId64 " and %" PRId64 ", %" PRId64 " given",
         param_name, min, max, long_value);
       return 0;
     }
@@ -40,7 +41,7 @@ static int get_param(zval* value,
 
     if (double_value > max || double_value < min) {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-        "%s must be between " LL_FORMAT " and " LL_FORMAT ", %g given",
+        "%s must be between %" PRId64 " and %" PRId64 ", %g given",
         param_name, min, max, double_value);
       return 0;
     }
@@ -53,7 +54,7 @@ static int get_param(zval* value,
 
     if (parsed_big_int > max || parsed_big_int < min) {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-        "%s must be between " LL_FORMAT " and " LL_FORMAT ", " LL_FORMAT " given",
+        "%s must be between " "%" PRId64 " and " "%" PRId64 ", " "%" PRId64 " given",
         param_name, min, max, parsed_big_int);
       return 0;
     }
@@ -65,7 +66,7 @@ static int get_param(zval* value,
 
     if (bigint_value > max || bigint_value < min) {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0 ,
-        "%s must be between " LL_FORMAT " and " LL_FORMAT ", " LL_FORMAT " given",
+        "%s must be between " "%" PRId64 " and " "%" PRId64 ", " "%" PRId64 " given",
         param_name, min, max, bigint_value);
       return 0;
     }
@@ -99,7 +100,7 @@ char *php_driver_duration_to_string(php_driver_duration *duration)
   if (final_nanos < 0)
     final_nanos = -final_nanos;
   
-  spprintf(&rep, 0, "%s%dmo%dd" LL_FORMAT "ns", is_negative ? "-" : "", final_months, final_days, final_nanos);
+  spprintf(&rep, 0, "%s%dmo%dd%" PRId64 "ns", is_negative ? "-" : "", final_months, final_days, final_nanos);
   return rep;
 }
 
@@ -108,7 +109,7 @@ php_driver_duration_init(INTERNAL_FUNCTION_PARAMETERS)
 {
   zval *months, *days, *nanos;
   cass_int64_t param;
-  php_driver_duration *self = NULL;
+  php_driver_duration *self = nullptr;
 
   if (zend_parse_parameters(ZEND_NUM_ARGS() , "zzz", &months, &days, &nanos) == FAILURE) {
     return;
@@ -147,7 +148,7 @@ PHP_METHOD(Duration, __construct)
 PHP_METHOD(Duration, __toString)
 {
   char* rep;
-  php_driver_duration *self = NULL;
+  php_driver_duration *self = nullptr;
 
   if (zend_parse_parameters_none() == FAILURE)
     return;
@@ -168,7 +169,7 @@ PHP_METHOD(Duration, type)
 
 PHP_METHOD(Duration, months)
 {
-  php_driver_duration *self = NULL;
+  php_driver_duration *self = nullptr;
 
   if (zend_parse_parameters_none() == FAILURE)
     return;
@@ -179,7 +180,7 @@ PHP_METHOD(Duration, months)
 
 PHP_METHOD(Duration, days)
 {
-  php_driver_duration *self = NULL;
+  php_driver_duration *self = nullptr;
 
   if (zend_parse_parameters_none() == FAILURE)
     return;
@@ -238,15 +239,8 @@ php_driver_duration_properties(
 {
   HashTable *props = zend_std_get_properties(object );
 
-#if PHP_MAJOR_VERSION >= 8
   php_driver_duration  *self = PHP5TO7_ZEND_OBJECT_GET(duration, object);
-#else
-  php_driver_duration  *self = PHP_DRIVER_GET_DURATION(object);
-#endif
-
   zval wrapped_months, wrapped_days, wrapped_nanos;
-
-
 
   ZVAL_LONG(&wrapped_months, self->months);
   ZVAL_LONG(&wrapped_days, self->days);
@@ -338,11 +332,7 @@ void php_driver_define_Duration()
 
   memcpy(&php_driver_duration_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
   php_driver_duration_handlers.std.get_properties  = php_driver_duration_properties;
-#if PHP_MAJOR_VERSION >= 8
   php_driver_duration_handlers.std.compare = php_driver_duration_compare;
-#else
-  php_driver_duration_handlers.std.compare_objects = php_driver_duration_compare;
-#endif
 
   php_driver_duration_handlers.hash_value = php_driver_duration_hash_value;
   php_driver_duration_handlers.std.clone_obj = NULL;

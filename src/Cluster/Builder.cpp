@@ -19,8 +19,10 @@
 #include <cassandra.h>
 
 #include <php_driver.h>
+#include <SSLOptions/SSLOptions.h>
 #include <php_driver_globals.h>
 #include <php_driver_types.h>
+#include <ZendCPP/ZendCPP.hpp>
 #include <util/consistency.h>
 
 #include "BuilderHandlers.h"
@@ -33,13 +35,14 @@ BEGIN_EXTERN_C()
 
 zend_class_entry *php_driver_cluster_builder_ce = nullptr;
 
-static zend_always_inline zend_string *php_driver_build_hosts_str(zval *args, size_t argc)
+static zend_always_inline zend_string *php_driver_build_hosts_str(const zval *args,
+                                                                  const size_t argc)
 {
     smart_str hosts{nullptr, 0};
 
     for (size_t i = 0; i < argc; i++)
     {
-        zval *host = &args[i];
+        const zval *host = &args[i];
 
         if (Z_TYPE_P(host) != IS_STRING)
         {
@@ -467,8 +470,8 @@ ZEND_METHOD(Cassandra_Cluster_Builder, withSSL)
     Z_PARAM_OBJECT_OF_CLASS(ssl_options, php_driver_ssl_ce)
     ZEND_PARSE_PARAMETERS_END();
 
-    php_driver_ssl *ssl = PHP_DRIVER_GET_SSL(ssl_options);
-    php_driver_cluster_builder *self = PHP_DRIVER_GET_CLUSTER_BUILDER(getThis());
+    php_scylladb_ssl *ssl = Z_SCYLLADB_SSL_P(ssl_options);
+    php_driver_cluster_builder *self = PHP_DRIVER_GET_CLUSTER_BUILDER(ZEND_THIS);
 
     if (self->ssl_options != nullptr)
     {
@@ -643,11 +646,11 @@ ZEND_METHOD(Cassandra_Cluster_Builder, withRetryPolicy)
     zval *retry_policy = nullptr;
 
     ZEND_PARSE_PARAMETERS_START(1, 1)
-    Z_PARAM_OBJECT_OF_CLASS(retry_policy, php_driver_retry_policy_ce)
+    Z_PARAM_OBJECT_OF_CLASS(retry_policy, php_scylladb_retry_policy_ce)
     ZEND_PARSE_PARAMETERS_END();
 
     php_driver_cluster_builder *self = PHP_DRIVER_GET_CLUSTER_BUILDER(getThis());
-    php_driver_retry_policy *policy = PHP_DRIVER_GET_RETRY_POLICY(retry_policy);
+    auto *policy = ZendCPP::ObjectFetch<php_driver_retry_policy>(retry_policy);
 
     if (self->retry_policy != nullptr)
     {

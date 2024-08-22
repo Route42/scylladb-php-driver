@@ -568,7 +568,7 @@ PHP_METHOD(DefaultSession, execute) {
     if (opts->serial_consistency >= 0) serial_consistency = opts->serial_consistency;
 
     if (!Z_ISUNDEF(opts->retry_policy))
-      retry_policy = (PHP_DRIVER_GET_RETRY_POLICY(&opts->retry_policy))->policy;
+      retry_policy = (ZendCPP::ObjectFetch<php_driver_retry_policy>(&opts->retry_policy))->policy;
 
     timestamp = opts->timestamp;
   }
@@ -709,7 +709,7 @@ PHP_METHOD(DefaultSession, executeAsync) {
     if (opts->serial_consistency >= 0) serial_consistency = opts->serial_consistency;
 
     if (!Z_ISUNDEF(opts->retry_policy))
-      retry_policy = (PHP_DRIVER_GET_RETRY_POLICY(&opts->retry_policy))->policy;
+      retry_policy = ZendCPP::ObjectFetch<php_driver_retry_policy>((&opts->retry_policy))->policy;
 
     timestamp = opts->timestamp;
   }

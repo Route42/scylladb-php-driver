@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <ZendCPP/String/Builder.h>
 #include <php_driver_types.h>
 #include <util/hash.h>
 #include <util/types.h>
@@ -51,14 +52,14 @@ static time_now php_driver_time_now() {
   cass_int64_t microseconds;
 #if defined(__APPLE__) && defined(__MACH__)
   struct timeval ts {};
-  gettimeofday(&tv, NULL);
-  seconds = (cass_int64_t)tv.tv_sec;
-  microseconds = (cass_int64_t)tv.tv_usec;
-#else
-  struct timespec ts {};
-  clock_gettime(CLOCK_REALTIME, &ts);
+  gettimeofday(&ts, NULL);
   seconds = (cass_int64_t)ts.tv_sec;
-  microseconds = (cass_int64_t)ts.tv_nsec / 1000;
+  microseconds = (cass_int64_t)ts.tv_usec;
+#else
+  timespec ts{};
+  clock_gettime(CLOCK_REALTIME, &ts);
+  seconds = ts.tv_sec;
+  microseconds = ts.tv_nsec / 1000;
 #endif
   return time_now{seconds, microseconds};
 }
@@ -138,11 +139,18 @@ ZEND_METHOD(Cassandra_Timestamp, microtime) {
 ZEND_METHOD(Cassandra_Timestamp, toDateTime) {
   ZEND_PARSE_PARAMETERS_NONE();
 
-  zval datetime;
   auto self = ZendCPP::ObjectFetch<php_scylladb_timestamp>(getThis());
 
-  zend_result status =
-      scylladb_php_to_datetime_internal(&datetime, "Uu", [self]() { return self->timestamp; });
+  zval datetime;
+  zend_result status = scylladb_php_to_datetime_internal(&datetime, "U.v", [self]() {
+    int64_t sec = self->timestamp / 1000;
+    int64_t millisec = (self->timestamp - (sec * 1000));
+
+    ZendCPP::StringBuilder builder(32);
+
+    auto str = builder.Append(sec).Append('.').Append(millisec).Build();
+    return zend_string_copy(str);
+  });
 
   if (status == FAILURE) [[unlikely]] {
     zend_throw_exception(php_driver_runtime_exception_ce, "Failed to create DateTime object", 0);

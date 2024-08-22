@@ -30,9 +30,9 @@
                           ip_address_describe_token(type), ((int)(in_ptr - in) - 1), in);       \
   return 0;
 
-enum token_type { TOKEN_END = 0, TOKEN_COLON, TOKEN_DOT, TOKEN_HEX, TOKEN_DEC, TOKEN_ILLEGAL };
+enum ip_address_token_type { TOKEN_END = 0, TOKEN_COLON, TOKEN_DOT, TOKEN_HEX, TOKEN_DEC, TOKEN_ILLEGAL };
 
-enum parser_state {
+enum inet_parser_state {
   STATE_START = 0,
   STATE_FIELD = 1,
   STATE_COMPRESSED = 2,
@@ -44,7 +44,7 @@ enum parser_state {
   STATE_END = 8
 };
 
-static const char *ip_address_describe_token(enum token_type type) {
+static const char *ip_address_describe_token(enum ip_address_token_type type) {
   switch (type) {
     case TOKEN_END:
       return "end of address";
@@ -63,9 +63,9 @@ static const char *ip_address_describe_token(enum token_type type) {
   }
 }
 
-static enum token_type ip_address_tokenize(char *address, char *token, int *token_len,
+static enum ip_address_token_type ip_address_tokenize(char *address, char *token, int *token_len,
                                            char **next_token) {
-  enum token_type type;
+  enum ip_address_token_type type;
 
   char ch;
   int len = 0;
@@ -123,8 +123,8 @@ int php_driver_parse_ip_address(char *in, CassInet *inet) {
   int token_len = -1;
   int prev_token_len = 0;
   char *in_ptr = in;
-  enum token_type type;
-  enum parser_state state = STATE_START;
+  enum ip_address_token_type type;
+  enum inet_parser_state state = STATE_START;
   int pos = -1;
   int compress_pos = -1;
   int ipv4_pos = -1;
@@ -339,8 +339,9 @@ int php_driver_parse_ip_address(char *in, CassInet *inet) {
     if (state == STATE_END) {
       if (type == TOKEN_END)
         break;
-      else
+      else {
         EXPECTING_TOKEN("the end of address");
+      }
     }
   }
 
@@ -429,3 +430,4 @@ void php_driver_format_address(CassInet inet, char **out) {
     spprintf(out, 0, "%d.%d.%d.%d", inet.address[0], inet.address[1], inet.address[2],
              inet.address[3]);
 }
+

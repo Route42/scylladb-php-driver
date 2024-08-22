@@ -15,6 +15,7 @@
  */
 
 #include <DateTime/Date.h>
+#include <ZendCPP/String/Builder.h>
 #include <php.h>
 #include <util/hash.h>
 #include <util/types.h>
@@ -116,7 +117,12 @@ ZEND_METHOD(Cassandra_Date, toDateTime) {
   zval datetime;
 
   zend_result status = scylladb_php_to_datetime_internal(&datetime, "U", [self, time_obj]() {
-    return cass_date_time_to_epoch(self->date, time_obj != nullptr ? time_obj->time : 0);
+    ZendCPP::StringBuilder builder;
+    auto str =
+        builder
+            .Append(cass_date_time_to_epoch(self->date, time_obj != nullptr ? time_obj->time : 0))
+            .Build();
+    return zend_string_copy(str);
   });
 
   if (status == FAILURE) [[unlikely]] {

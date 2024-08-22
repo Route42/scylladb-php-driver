@@ -14,49 +14,51 @@
  * limitations under the License.
  */
 
-#include "php_driver.h"
-#include "php_driver_types.h"
-#include "util/types.h"
-BEGIN_EXTERN_C()
-zend_class_entry *php_driver_retry_policy_fallthrough_ce = NULL;
+#include <RetryPolicy/RetryPolicy.h>
+#include <ZendCPP/ZendCPP.hpp>
 
-static zend_function_entry php_driver_retry_policy_fallthrough_methods[] = {
-  PHP_FE_END
-};
+BEGIN_EXTERN_C()
+
+#include "Fallthrough_arginfo.h"
+
+zend_class_entry *php_driver_retry_policy_fallthrough_ce = nullptr;
 
 static zend_object_handlers php_driver_retry_policy_fallthrough_handlers;
 
-static void
-php_driver_retry_policy_fallthrough_free(zend_object *object )
+PHP_SCYLLADB_API php_driver_retry_policy *php_scylladb_retry_policy_fallthrough_instantiate(zval *dst)
 {
-  php_driver_retry_policy *self = PHP5TO7_ZEND_OBJECT_GET(retry_policy, object);
+  zval val;
 
+  if (object_init_ex(&val, php_scylladb_retry_policy_default_ce) == FAILURE) {
+    return nullptr;
+  }
+
+  ZVAL_OBJ(dst, Z_OBJ(val));
+
+  auto* obj = ZendCPP::ObjectFetch<php_driver_retry_policy>(dst);
+  obj->policy = cass_retry_policy_fallthrough_new();
+  return obj;
+}
+
+static void php_driver_retry_policy_fallthrough_free(zend_object *object)
+{
+  auto *self = ZendCPP::ObjectFetch<php_driver_retry_policy>(object);
   cass_retry_policy_free(self->policy);
-
-  zend_object_std_dtor(&self->zendObject);
-
 }
 
-static zend_object*
-php_driver_retry_policy_fallthrough_new(zend_class_entry *ce )
+static zend_object* php_driver_retry_policy_fallthrough_new(zend_class_entry *ce)
 {
-  php_driver_retry_policy *self = PHP5TO7_ZEND_OBJECT_ECALLOC(retry_policy, ce);
-
+  auto *self = ZendCPP::Allocate<php_driver_retry_policy>(ce, &php_driver_retry_policy_fallthrough_handlers);
   self->policy = cass_retry_policy_fallthrough_new();
-
-  PHP5TO7_ZEND_OBJECT_INIT_EX(retry_policy, retry_policy_fallthrough, self, ce);
+  return &self->zendObject;
 }
 
-void php_driver_define_RetryPolicyFallthrough()
-{
-  zend_class_entry ce;
-
-  INIT_CLASS_ENTRY(ce, PHP_DRIVER_NAMESPACE "\\RetryPolicy\\Fallthrough", php_driver_retry_policy_fallthrough_methods);
-  php_driver_retry_policy_fallthrough_ce = zend_register_internal_class(&ce );
-  zend_class_implements(php_driver_retry_policy_fallthrough_ce , 1, php_driver_retry_policy_ce);
-  php_driver_retry_policy_fallthrough_ce->ce_flags     |= ZEND_ACC_FINAL;
+void php_driver_define_RetryPolicyFallthrough(zend_class_entry* retry_policy_interface) {
+  php_driver_retry_policy_fallthrough_ce = register_class_Cassandra_RetryPolicy_Fallthrough(retry_policy_interface);
   php_driver_retry_policy_fallthrough_ce->create_object = php_driver_retry_policy_fallthrough_new;
 
-  memcpy(&php_driver_retry_policy_fallthrough_handlers, zend_get_std_object_handlers(), sizeof(zend_object_handlers));
+  ZendCPP::InitHandlers<php_driver_retry_policy>(&php_driver_retry_policy_fallthrough_handlers);
+  php_driver_retry_policy_fallthrough_handlers.free_obj = php_driver_retry_policy_fallthrough_free;
 }
+
 END_EXTERN_C()

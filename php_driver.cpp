@@ -309,18 +309,15 @@ zend_class_entry *exception_class(CassError rc) {
   }
 }
 
-void throw_invalid_argument(zval *object, const char *object_name, const char *expected_type) {
+void throw_invalid_argument(const zval *object, const char *object_name, const char *expected_type) {
   if (Z_TYPE_P(object) == IS_OBJECT) {
-    const char *cls_name = NULL;
-    size_t cls_len;
-
     zend_string *str = Z_OBJ_HANDLER_P(object, get_class_name)(Z_OBJ_P(object));
-    cls_name = str->val;
-    cls_len = str->len;
+   const char * cls_name = str->val;
+    size_t cls_len = str->len;
     if (cls_name) {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
                               "%s must be %s, an instance of %.*s given", object_name,
-                              expected_type, (int)cls_len, cls_name);
+                              expected_type, static_cast<int>(cls_len), cls_name);
       zend_string_release(str);
     } else {
       zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
@@ -329,7 +326,7 @@ void throw_invalid_argument(zval *object, const char *object_name, const char *e
     }
   } else if (Z_TYPE_P(object) == IS_STRING) {
     zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0,
-                            "%s must be %s, '%Z' given", object_name, expected_type, object);
+                            "%s must be %s, %Z given", object_name, expected_type, object);
   } else {
     zend_throw_exception_ex(php_driver_invalid_argument_exception_ce, 0, "%s must be %s, %Z given",
                             object_name, expected_type, object);
@@ -534,11 +531,11 @@ PHP_MINIT_FUNCTION(php_driver) {
   php_driver_define_TypeUserType();
   php_driver_define_TypeCustom();
 
-  php_driver_define_RetryPolicy();
-  php_driver_define_RetryPolicyDefault();
-  php_driver_define_RetryPolicyDowngradingConsistency();
-  php_driver_define_RetryPolicyFallthrough();
-  php_driver_define_RetryPolicyLogging();
+  auto * retry_policy_interface = php_scylladb_define_RetryPolicy();
+  php_scylladb_define_RetryPolicyDefault(retry_policy_interface);
+  php_driver_define_RetryPolicyDowngradingConsistency(retry_policy_interface);
+  php_driver_define_RetryPolicyFallthrough(retry_policy_interface);
+  php_driver_define_RetryPolicyLogging(retry_policy_interface);
 
   php_driver_define_TimestampGenerator();
   php_driver_define_TimestampGeneratorMonotonic();
@@ -550,7 +547,7 @@ PHP_MINIT_FUNCTION(php_driver) {
 PHP_MSHUTDOWN_FUNCTION(php_driver) { return SUCCESS; }
 
 PHP_RINIT_FUNCTION(php_driver) {
-#define XX_SCALAR(name, value) ZVAL_UNDEF(&PHP_DRIVER_G(type_##name));
+#define XX_SCALAR(name, value) ZVAL_UNDEF(&PHP_DRIVER_G(type_## name));
   PHP_DRIVER_SCALAR_TYPES_MAP(XX_SCALAR)
 #undef XX_SCALAR
 
@@ -558,7 +555,7 @@ PHP_RINIT_FUNCTION(php_driver) {
 }
 
 PHP_RSHUTDOWN_FUNCTION(php_driver) {
-#define XX_SCALAR(name, value) PHP5TO7_ZVAL_MAYBE_DESTROY(PHP_DRIVER_G(type_##name));
+#define XX_SCALAR(name, value) PHP5TO7_ZVAL_MAYBE_DESTROY(PHP_DRIVER_G(type_## name));
   PHP_DRIVER_SCALAR_TYPES_MAP(XX_SCALAR)
 #undef XX_SCALAR
 

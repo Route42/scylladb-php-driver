@@ -1,8 +1,0 @@
-version: '3.9'
-
-services:
-  scylladb:
-    image: scylladb/scylla:5.1
-    command: --smp 1 --developer-mode 1 --memory 1G --overprovisioned 1
-    ports:
-      - "9042:9042"
