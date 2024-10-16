@@ -209,4 +209,6 @@ ENTRYPOINT ["bash"]
 
 FROM debian:$DEBIAN_RELEASE
 
+COPY --from=php_driver_build /cassandra-cpp /cassandra-cpp
+COPY --from=php_driver_build /scylladb-cpp /scylladb-cpp
 COPY --from=php_driver_build /ext-scylladb/out/Release /ext-scylladb/out/Release
